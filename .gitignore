@@ -12,4 +12,11 @@
 /captures
 .externalNativeBuild
 .cxx
+.idea/*
+.idea/caches
+.idea/libraries
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
 local.properties
