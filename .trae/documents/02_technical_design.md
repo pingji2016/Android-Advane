@@ -1,168 +1,128 @@
-# 技术设计文档
+# 技术设计文档（深化版）
 
-## 1 技术选型
-- **语言**：Kotlin 100 %
-- **UI**：Jetpack Compose（全屏 Canvas 游戏渲染 + 传统 Compose UI 做菜单）
-- **构建**：Gradle Kotlin DSL（已存在）
-- **最低 SDK**：26（Android 8.0）
-- **协程**：Kotlinx Coroutines（游戏循环、网络下载、IO）
-- **网络**：标准 `HttpURLConnection`，无第三方库，减少体积
-- **地图工具**：Tiled → 导出 JSON，瓦片尺寸 32 px 或 64 px
-- **资源格式**：
-  - 图像：PNG / WebP（透明），图集合并为 `atlas.png` + `atlas.json`
-  - 音频：OGG（短音效 SoundPool）、MP3/OGG（长 BGM MediaPlayer/ExoPlayer）
-- **开源资源**：Kenney、OpenGameArt，统一放 `assets/open_source_attribution.txt`
-
-## 2 总体架构
+## 1 总体架构补充
+在原有单机架构上新增 **lan** 模块，负责局域网联机全部逻辑：
 ```
 app/src/main/java/com/example/myapplication/
-├── MainActivity.kt              // 入口，锁定横屏，导航
-├── game/                        // 纯游戏循环与渲染
-│   ├── GameEngine.kt            // 固定步长更新 + 渲染调度
-│   ├── GameScreen.kt            // Compose Canvas 全屏渲染
-│   ├── World.kt                 // 关卡容器，管理实体与碰撞
-│   ├── entities/
-│   │   ├── Player.kt
-│   │   ├── Enemy.kt
-│   │   └── Projectile.kt
-│   ├── level/
-│   │   ├── Level.kt             // 瓦片网格 + 碰撞层
-│   │   └── TiledLoader.kt       // Tiled JSON → Level 对象
-│   └── physics/
-│       ├── AABB.kt
-│       └── CollisionGrid.kt
-├── ui/                          // 传统 Compose UI（菜单、设置、更新）
-│   ├── menu/
-│   │   ├── MainMenuScreen.kt
-│   │   ├── LevelSelectScreen.kt
-│   │   └── SettingsScreen.kt
-│   ├── component/
-│   │   ├── VirtualPad.kt        // 虚拟按键
-│   │   └── StarRating.kt
-│   └── theme/                   // 已存在，按需扩展
-├── assets/                      // 首包资源（gradle assets 目录）
-│   ├── levels/                  // 内置 5 关 *.json
-│   ├── atlas/                   // atlas.png + atlas.json
-│   └── audio/                   // 首包 BGM & SFX
-├── data/                        // 运行时私有目录（filesDir）
-│   ├── save.json
-│   ├── settings.json
-│   └── assets/<version>/        // 在线更新后资源
-├── update/                      // 在线更新模块
-│   ├── Manifest.kt              // 清单数据类
-│   ├── UpdateManager.kt         // 检查 → 下载 → 校验 → 切换
-│   └── Downloader.kt            // 并发下载 + 进度回调
-└── utils/
-    ├── JsonUtils.kt
-    ├── FileUtils.kt             // 原子写入、备份、哈希
-    └── Logger.kt                // 简单文件日志
+├── lan/
+│   ├── LanManager.kt            // Wi-Fi P2P + NSD 生命周期管理
+│   ├── Room.kt                  // 房间数据类
+│   ├── RoomManager.kt           // 房间创建/加入/离开/开始游戏
+│   ├── Peer.kt                  // 对端玩家信息
+│   ├── NetChannel.kt            // 可靠 UDP 封装（回退/预测）
+│   ├── Packet.kt                // 协议数据单元
+│   ├── SyncManager.kt           // 游戏状态同步（权威+预测）
+│   ├── ChatManager.kt           // 房间内聊天（可靠 UDP）
+│   └── MigrateManager.kt        // 主机迁移（投票）
 ```
 
-## 3 核心模块设计
+## 2 网络技术选型
+- **Wi-Fi P2P**：Android 官方 API，支持 2–4 人直连，无需路由器。
+- **NSD（Network Service Discovery）**：广播房间信息，支持服务名、TXT 记录（房间名、模式、人数、密码哈希）。
+- **传输层**：UDP + 自定义可靠机制（ACK+重传+乱序缓存），单包 ≤ 512 B；关键事件（伤害、道具）强制可靠。
+- **频率**：60 Hz 逻辑帧，每帧位置/速度广播；丢包时客户端预测+服务器权威修正。
+- **延迟**：局域网下 < 20 ms，预测误差 > 2 格时平滑插值纠正。
 
-### 3.1 GameEngine（固定步长）
+## 3 协议设计
+### 3.1 包类型（PacketType）
 ```kotlin
-class GameEngine(val world: World) {
-    private var accumulatorNs = 0L
-    private val stepNs = 16_666_667L // 60 Hz
-
-    fun update(frameDtNs: Long) {
-        accumulatorNs += frameDtNs
-        while (accumulatorNs >= stepNs) {
-            world.step(stepNs)
-            accumulatorNs -= stepNs
-        }
-    }
-
-    fun render(scope: DrawScope) = world.draw(scope)
-}
-```
-Compose 侧使用 `LaunchedEffect(Unit) { withFrameNanos { ... } }` 驱动。
-
-### 3.2 World & Level
-- `World` 持有 `Player`、`List<Enemy>`、当前 `Level` 实例。
-- `Level` 内部用 `IntArray` 保存瓦片索引，碰撞层单独 `BooleanArray` 或稀疏网格。
-- 渲染：遍历可见瓦片，从 `ImageBitmap` 图集裁剪绘制。
-- 碰撞：AABB 与地形网格相交测试；玩家与敌人分离轴解算。
-
-### 3.3 输入系统
-- 虚拟按键：Compose `Box` + `pointerInput`，命中区域圆形/矩形。
-- 手柄：`onKeyEvent` 映射到 `InputCommand`（Left、Right、Jump、Attack）。
-- 输入缓存：每帧写入 `InputState`，逻辑线程读取。
-
-### 3.4 资源管理
-- 启动时根据 `current_version` 选择 `filesDir/assets/<version>/`；无则回退首包 `assets/`。
-- 图集加载：`AssetLoader.loadAtlas(dir)` → `ImageBitmap` + `Map<String, Rect>`。
-- 音频：`SoundPool` 实例单例，BGM 使用 `MediaPlayer` 生命周期绑定 `GameScreen`。
-
-### 3.5 在线更新
-#### 3.5.1 清单格式（manifest.json）
-```json
-{
-  "version": "1.0.3",
-  "timestamp": 1731500000,
-  "assets": [
-    {"id":"tileset_main","type":"image","url":"...","sha256":"...","size":512340},
-    {"id":"bgm_stage1","type":"audio","url":"...","sha256":"...","size":1023412}
-  ],
-  "levels": [
-    {"id":"level_6","url":"...","sha256":"...","size":39812}
-  ]
+enum class PacketType(val id: Byte) {
+    HANDSHAKE(0),       // 加入房间握手
+    WELCOME(1),         // 主机返回玩家ID、初始状态
+    HEARTBEAT(2),       // 心跳（每秒 1 次）
+    INPUT(3),           // 玩家输入（不可靠，60 Hz）
+    STATE(4),           // 权威状态修正（可靠，按需）
+    SPAWN(5),           // 生成实体（敌人、道具）
+    DAMAGE(6),          // 伤害事件（可靠）
+    ITEM(7),            // 道具拾取/使用（可靠）
+    CHAT(8),            // 聊天（可靠）
+    MIGRATE(9),         // 主机迁移通知
+    DISCONNECT(10)      // 离开房间
 }
 ```
 
-#### 3.5.2 更新流程
-1. `UpdateManager.check(manifestUrl)` → 下载清单 → 与本地 `current_version` 对比。
-2. 差异计算：按 `id` 与 `sha256` 判断缺失或变更。
-3. 并发下载（`Dispatchers.IO`，最大 3 线程）→ 写入临时文件 → 校验 SHA256。
-4. 全部成功：移动到 `filesDir/assets/<newVersion>/`，更新 `current_version`，重启游戏生效。
-5. 任一失败：删除临时文件，提示用户重试，保持旧版本可玩。
+### 3.2 包头格式（共 12 B）
+| 字段 | 长度 | 说明 |
+|------|------|------|
+| type | 1 B  | PacketType.id |
+| seq  | 2 B  | 自增序列号，用于 ACK/重传 |
+| ack  | 2 B  | 最近收到对端 seq |
+| ackBits | 4 B | 历史 ACK 位图 |
+| payloadLen | 2 B | 后续载荷长度 |
+| checksum | 1 B | 简单和校验 |
 
-#### 3.5.3 版本回滚
-- 记录 `previous_version`；加载资源若抛出异常 → 回退到 `previous_version` 并提示。
+### 3.3 载荷示例
+- **INPUT**：playerId(1) + flags(1) + vx(2) + vy(2) + aimX(2) + aimY(2) = 10 B
+- **STATE**：playerId + x(4) + y(4) + vx(2) + vy(2) + hp(1) + state(1) = 18 B
+- **CHAT**：playerId + msgLen(1) + msg(≤128 UTF-8) ≤ 140 B
 
-### 3.6 存档与设置
-- `SaveData` 数据类 → `Json.encodeToString()` → 原子写入 `save.json.tmp` → 重命名。
-- 备份：写入前复制 `save.json → save.bak`。
-- 设置同理，`settings.json` 存音量、画质、操作方案、语言。
+## 4 房间生命周期
+### 4.1 创建房间（主机）
+1. 初始化 Wi-Fi P2P Group Owner，获取 GO IP（通常为 192.168.49.1）。
+2. 启动 ServerSocket（端口 19999），监听客户端 TCP 握手（交换密钥+版本校验）。
+3. 注册 NSD 服务：
+   - 服务名：`_platformer._udp`
+   - TXT 记录：`room=房间名&mode=coop&players=1/4&pwd=sha256(password)&ver=1.0.0`
+4. 等待客户端发现与连接，维护 Peer 列表，广播 WELCOME 包分配 playerId。
 
-### 3.7 日志与调试
-- `Logger.d(tag, msg)` 写入 `filesDir/logs/<date>.txt`，文件大小 ≥ 1 MB 自动滚动。
-- 提供“导出日志”按钮（设置页），方便用户反馈。
+### 4.2 加入房间（客户端）
+1. 扫描 NSD，过滤相同 `ver`；展示房间列表（名称、模式、人数、延迟）。
+2. 选择房间，TCP 握手（密码校验），成功后记录 GO IP+端口。
+3. 启动 NetChannel，发送 HANDSHAKE，等待 WELCOME 获得初始状态与 playerId。
+4. 进入房间 UI，可聊天、准备；房主点击开始后进入游戏同步阶段。
 
-## 4 性能与内存
-- 图集最大 2048×2048，避免多重绑定；瓦片按需裁剪缓存。
-- 对象池：`Projectile`、`Particle` 使用 `ObjectPool` 避免频繁 GC。
-- 纹理内存：使用 `ImageBitmap` 自动管理；关卡切换时主动 `bitmap.recycle()` 旧图集。
-- 音频流：BGM 只保留一首，切换关卡时释放旧实例。
+### 4.3 游戏同步
+- 主机权威：敌人 AI、机关状态、道具生成、伤害判定。
+- 客户端预测：本地输入立即表现，每帧广播 INPUT；主机每 200 ms 广播 STATE 修正，差异 > 阈值时平滑插值。
+- 关键事件（DAMAGE、ITEM、SPAWN）强制可靠 ACK；超时 500 ms 重传 3 次。
 
-## 5 安全与合规
-- 资源哈希校验，清单 HTTPS（CDN 支持）。
-- 不申请敏感权限，仅 `INTERNET`（更新时）。
-- 开源资源在“关于”页列出作者与许可证，附带 `open_source_attribution.txt` 文件。
+### 4.4 断线与重连
+- 心跳超时 5 s 判定断线，缓存玩家状态 30 s；重连时发送 HANDSHAKE+旧 playerId，主机比对缓存恢复。
+- 主机断线：客户端投票（延迟最低者胜出），MigrateManager 移交权威，广播 MIGRATE 包，新主机继续游戏。
 
-## 6 测试策略
-- 单元测试：
-  - `CollisionGridTest`：AABB 与地形相交边界。
-  - `ManifestTest`：清单解析、差异计算、回滚场景。
-  - `FileUtilsTest`：原子写入、哈希校验。
-- 集成测试：
-  - 无网启动 → 可玩首包。
-  - 弱网更新 → 中断后重试 → 完整性校验。
-  - 低端机 30 fps 不掉帧（Profiler 验证）。
+## 5 数据同步细节
+### 5.1 玩家状态
+- 位置：主机权威，客户端预测+插值；跳跃/攻击状态同步 flags。
+- 血量：主机计算，DAMAGE 包可靠广播；客户端表现受击动画。
+- 道具：主机生成 ITEM 包，客户端拾取后立即表现，失败时回滚。
 
-## 7 构建与发布
-- Gradle 配置：
-  - `abiFilters 'armeabi-v7a','arm64-v8a'`
-  - `resources.excludes += 'DebugProbesKt.bin'`
-  - `minifyEnabled true` + `proguard-rules.pro`（仅混淆代码，不压缩资源）。
-- 输出：AAB 上传 Play；APK 侧载用户。
-- 版本号规则：`major.minor.patch`，与 `manifest.json` 保持一致。
+### 5.2 敌人与机关
+- 敌人 AI 只在主机运行，SPAWN 包广播出生位置、类型、初始朝向；客户端表现代理。
+- 机关（按钮、升降台）状态由主机发送 STATE 包，客户端表现同步。
 
-## 8 未来扩展（可选）
-- 云存档：Google Play Games Services。
-- 关卡编辑器：内置简易编辑器，导出 JSON 上传 CDN。
-- 多人竞速：同一关卡幽灵竞速（需服务器，超出单机范畴，暂不实现）。
+### 5.3 竞速幽灵
+- 单机/联机最佳记录保存为输入序列+时间戳（ghost.json）。
+- 联机竞速时，主机选择“启用幽灵”，客户端加载对应 ghost 数据，本地回放幽灵影像，不影响同步。
+
+## 6 聊天与信号
+- 预设短语 20 条（快捷键 0–9 双按），表情 8 个；支持 UTF-8 手动输入 ≤ 64 字。
+- CHAT 包可靠传输，顺序广播；刷屏限制：每人每秒最多 3 条。
+
+## 7 性能与带宽
+- 4 人满员场景：
+  - 上行：每人 60 Hz INPUT ≈ 600 B/s + 可靠事件平均 200 B/s ≈ 0.8 KB/s
+  - 下行：主机广播 STATE 200 ms 周期 ≈ 4×18 B×5 = 360 B/s + 可靠事件 200 B/s ≈ 0.6 KB/s
+- 总带宽 < 30 KB/s，局域网完全无压力；数据包单包 < 512 B，避免分片。
+
+## 8 安全与作弊
+- 局域网信任模型，仅做基础校验：版本号、包长度、checksum；不处理恶意客户端。
+- 主机权威+状态修正可有效防止客户端修改位置/血量；发现异常（位置跳跃 > 5 格）可踢出房间。
+
+## 9 错误处理与提示
+- P2P 连接失败：提示“请检查 Wi-Fi 是否开启，或尝试重启 WLAN”。
+- 房间已满：提示“房间人数已达上限”。
+- 密码错误：提示“房间密码错误”。
+- 主机迁移：顶部横幅“正在迁移主机…”，2 s 内完成。
+
+## 10 联机 UI 状态机
+```
+MainMenu -> LanLobby -> RoomList -> CreatingRoom -> RoomInside(Ready/Chat) -> GameSync -> GameRunning -> GameResult -> RoomInside
+```
+所有状态通过 `LanViewModel` 暴露 Compose UI，单向数据流；网络事件通过 `Channel<LanEvent>` 发送到 UI 层。
+
+## 11 兼容与降级
+- 不支持 Wi-Fi P2P 的设备（Android 4.x 或阉割）提示“当前设备不支持局域网联机”，隐藏入口。
+- 联机失败后自动提供“单机继续”按钮，不阻塞核心体验。
 
 ---
-以上设计可直接落地到 `app/src/main/java` 目录，下一步将按包结构创建骨架代码。
+下一版将实现上述骨架代码与 UI。

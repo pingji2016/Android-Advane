@@ -10,8 +10,9 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun MainMenuScreen(
     onStartGame: () -> Unit,
-    onLevelSelect: () -> Unit,
-    onSettings: () -> Unit
+    onLevelSelect: () -> Unit = {},
+    onSettings: () -> Unit = {},
+    onLanLobby: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -28,6 +29,10 @@ fun MainMenuScreen(
         Spacer(Modifier.height(16.dp))
         OutlinedButton(onLevelSelect, modifier = Modifier.fillMaxWidth(0.6f)) {
             Text("关卡选择")
+        }
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(onLanLobby, modifier = Modifier.fillMaxWidth(0.6f)) {
+            Text("联机大厅")
         }
         Spacer(Modifier.height(16.dp))
         OutlinedButton(onSettings, modifier = Modifier.fillMaxWidth(0.6f)) {
