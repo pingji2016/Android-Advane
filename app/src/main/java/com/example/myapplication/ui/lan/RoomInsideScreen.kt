@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,8 +20,8 @@ import com.example.myapplication.lan.RoomManager
 fun RoomInsideScreen(
     onBack: () -> Unit
 ) {
-    val room by RoomManager.getInstance().currentRoom
-    val peers by RoomManager.getInstance().peers
+    val room = RoomManager.getInstance().currentRoom
+    val peers = RoomManager.getInstance().peers
     val isHost = RoomManager.getInstance().isHost
 
     Scaffold(
@@ -34,7 +33,7 @@ fun RoomInsideScreen(
                 },
                 actions = {
                     IconButton(onClick = { /* TODO 复制房间码 */ }) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = "复制")
+                        Icon(Icons.Default.Star, contentDescription = "复制")
                     }
                 }
             )

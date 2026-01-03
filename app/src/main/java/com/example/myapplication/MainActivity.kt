@@ -8,11 +8,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import com.example.myapplication.game.GameEngine
 import com.example.myapplication.game.GameScreen
+import com.example.myapplication.game.Level
 import com.example.myapplication.game.World
-import com.example.myapplication.game.level.Level
 import com.example.myapplication.lan.LanApp
 import com.example.myapplication.lan.LanManager
 import com.example.myapplication.lan.RoomManager
