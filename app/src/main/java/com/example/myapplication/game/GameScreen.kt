@@ -1,12 +1,14 @@
 package com.example.myapplication.game
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.isActive
 import kotlin.math.min
 
@@ -39,7 +41,40 @@ fun GameScreen(
         }
     }
 
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier
+        .pointerInput(Unit) {
+            awaitEachGesture {
+                // 1. 等待第一个手指按下
+                val down = awaitFirstDown()
+                // 触发按下逻辑
+                gameEngine.onTouchStart(down.position.x, down.position.y)
+                
+                var currentPointerId = down.id
+                
+                // 2. 循环处理直到手指抬起
+                do {
+                    val event = awaitPointerEvent()
+                    val changes = event.changes
+                    
+                    // 找到我们追踪的那个手指
+                    val activeChange = changes.firstOrNull { it.id == currentPointerId }
+                    
+                    if (activeChange != null && activeChange.pressed) {
+                        // 如果还在按压状态，更新位置
+                        gameEngine.onTouchMove(activeChange.position.x, activeChange.position.y)
+                        // 消费事件防止冲突（虽然这里是唯一消费者）
+                        // activeChange.consume() 
+                    } else {
+                        // 手指抬起或丢失
+                        break
+                    }
+                } while (changes.any { it.pressed })
+                
+                // 3. 触发结束逻辑
+                gameEngine.onTouchEnd()
+            }
+        }
+    ) {
         gameEngine.render(this)
     }
 }

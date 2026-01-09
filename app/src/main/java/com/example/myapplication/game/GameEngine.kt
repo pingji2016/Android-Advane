@@ -20,4 +20,21 @@ class GameEngine(
     }
 
     fun render(scope: DrawScope) = world.draw(scope)
+    
+    fun onTouchStart(x: Float, y: Float) {
+        world.onTouchStart(x, y)
+    }
+
+    fun onTouchMove(x: Float, y: Float) {
+        world.onTouchMove(x, y)
+    }
+
+    fun onTouchEnd() {
+        world.onTouchEnd()
+    }
+
+    // Deprecated
+    fun onTouch(x: Float, y: Float) {
+        // No-op or forward to move if needed, but we prefer explicit start/move/end
+    }
 }

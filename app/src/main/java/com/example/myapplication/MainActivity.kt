@@ -1,6 +1,5 @@
 package com.example.myapplication
 
-import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import com.example.myapplication.game.GameEngine
 import com.example.myapplication.game.GameScreen
-import com.example.myapplication.game.Level
 import com.example.myapplication.game.World
 import com.example.myapplication.lan.LanApp
 import com.example.myapplication.lan.LanManager
@@ -28,8 +26,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 强制横屏
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        // 移除强制横屏
         enableEdgeToEdge()
 
         // 初始化全局 Context
@@ -54,15 +51,8 @@ class MainActivity : ComponentActivity() {
                         onBack = { screen = Screen.LanLobby }
                     )
                     Screen.Game -> {
-                        // 临时空关卡，后续用 TiledLoader 加载
-                        val level = Level(
-                            tileset = androidx.compose.ui.graphics.ImageBitmap(1, 1),
-                            tiles = IntArray(0),
-                            width = 0,
-                            height = 0,
-                            tileSize = 32
-                        )
-                        val world = World(level)
+                        // 新的游戏逻辑不需要 Level
+                        val world = World()
                         val engine = GameEngine(world)
                         GameScreen(engine, Modifier.fillMaxSize())
                     }
