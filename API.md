@@ -63,53 +63,7 @@
 }
 ```
 
-#### 1.2.6 系统控制 (System Controls)
-执行系统级界面操作。
-
-**JSON 格式:**
-```json
-{
-  "type": "notifications" | "quick_settings" | "lock" | "screenshot"
-}
-```
-*   `notifications`: 展开通知栏
-*   `quick_settings`: 展开快速设置面板
-*   `lock`: 锁定屏幕 (Android 9+)
-*   `screenshot`: 截取屏幕 (Android 9+)
-
-#### 1.2.7 应用启动 (Launch App)
-通过包名启动指定应用。
-
-**JSON 格式:**
-```json
-{
-  "type": "launch",
-  "package": "com.android.settings" // [必填] 目标应用包名
-}
-```
-
-#### 1.2.8 剪贴板控制 (Clipboard)
-设置设备剪贴板内容。
-
-**JSON 格式:**
-```json
-{
-  "type": "clipboard",
-  "text": "Copied Text" // [必填] 要复制的文本
-}
-```
-
-#### 1.2.9 唤醒屏幕 (Wake Up)
-点亮屏幕并唤醒设备。
-
-**JSON 格式:**
-```json
-{
-  "type": "wake"
-}
-```
-
-#### 1.2.10 全局操作 (Global Actions)
+#### 1.2.6 全局操作 (Global Actions)
 执行 Android 系统级导航操作。
 
 **JSON 格式:**
