@@ -12,7 +12,8 @@ fun MainMenuScreen(
     onStartGame: () -> Unit,
     onLevelSelect: () -> Unit = {},
     onSettings: () -> Unit = {},
-    onLanLobby: () -> Unit
+    onLanLobby: () -> Unit,
+    onRtcDemo: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -33,6 +34,10 @@ fun MainMenuScreen(
         Spacer(Modifier.height(16.dp))
         OutlinedButton(onLanLobby, modifier = Modifier.fillMaxWidth(0.6f)) {
             Text("联机大厅")
+        }
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(onRtcDemo, modifier = Modifier.fillMaxWidth(0.6f)) {
+            Text("WebRTC Demo")
         }
         Spacer(Modifier.height(16.dp))
         OutlinedButton(onSettings, modifier = Modifier.fillMaxWidth(0.6f)) {
