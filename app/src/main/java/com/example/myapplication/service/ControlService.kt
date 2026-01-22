@@ -2,12 +2,16 @@ package com.example.myapplication.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Path
 import android.graphics.Rect
 import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -53,6 +57,25 @@ class ControlService : AccessibilityService() {
                 "scroll" -> handleScroll(json)
                 "text" -> handleText(json)
                 "volume" -> handleVolume(json)
+                "launch" -> handleLaunch(json)
+                "clipboard" -> handleClipboard(json)
+                "wake" -> handleWake()
+                "notifications" -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+                "quick_settings" -> performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
+                "lock" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
+                    } else {
+                        Log.w(TAG, "Lock screen not supported on this version")
+                    }
+                }
+                "screenshot" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
+                    } else {
+                        Log.w(TAG, "Screenshot not supported on this version")
+                    }
+                }
                 "back" -> performGlobalAction(GLOBAL_ACTION_BACK)
                 "home" -> performGlobalAction(GLOBAL_ACTION_HOME)
                 "recent" -> performGlobalAction(GLOBAL_ACTION_RECENTS)
@@ -99,6 +122,40 @@ class ControlService : AccessibilityService() {
                 Log.d(TAG, "Volume Mute Toggle")
             }
         }
+    }
+
+    private fun handleLaunch(json: JSONObject) {
+        val packageName = json.optString("package")
+        if (packageName.isNotEmpty()) {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                Log.d(TAG, "Launched app: $packageName")
+            } else {
+                Log.w(TAG, "App not found: $packageName")
+            }
+        }
+    }
+
+    private fun handleClipboard(json: JSONObject) {
+        val text = json.optString("text")
+        if (text.isNotEmpty()) {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("remote_text", text)
+            clipboard.setPrimaryClip(clip)
+            Log.d(TAG, "Clipboard set: $text")
+        }
+    }
+
+    private fun handleWake() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val wakeLock = powerManager.newWakeLock(
+            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+            "AndroidAdvane:RemoteWake"
+        )
+        wakeLock.acquire(3000) // Wake up for 3 seconds
+        Log.d(TAG, "Device Woken Up")
     }
 
     private fun handleClick(json: JSONObject) {
