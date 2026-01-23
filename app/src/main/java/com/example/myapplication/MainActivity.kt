@@ -18,6 +18,7 @@ import com.example.myapplication.lan.RoomManager
 import com.example.myapplication.ui.lan.LanLobbyScreen
 import com.example.myapplication.ui.lan.RoomInsideScreen
 import com.example.myapplication.ui.menu.MainMenuScreen
+import com.example.myapplication.ui.rtc.RtcDemoScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -37,7 +38,8 @@ class MainActivity : ComponentActivity() {
                 when (val s = screen) {
                     Screen.MainMenu -> MainMenuScreen(
                         onStartGame = { screen = Screen.Game },
-                        onLanLobby = { screen = Screen.LanLobby }
+                        onLanLobby = { screen = Screen.LanLobby },
+                        onRtcDemo = { screen = Screen.RtcDemo }
                     )
                     Screen.LanLobby -> LanLobbyScreen(
                         onBack = { screen = Screen.MainMenu },
@@ -49,6 +51,9 @@ class MainActivity : ComponentActivity() {
                     )
                     Screen.RoomInside -> RoomInsideScreen(
                         onBack = { screen = Screen.LanLobby }
+                    )
+                    Screen.RtcDemo -> RtcDemoScreen(
+                        onBack = { screen = Screen.MainMenu }
                     )
                     Screen.Game -> {
                         // 新的游戏逻辑不需要 Level
@@ -77,5 +82,6 @@ class MainActivity : ComponentActivity() {
         data object Game : Screen()
         data object LanLobby : Screen()
         data object RoomInside : Screen()
+        data object RtcDemo : Screen()
     }
 }
