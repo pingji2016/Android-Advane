@@ -5,17 +5,20 @@ import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.os.Build
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.example.myapplication.R
 import com.example.myapplication.service.ControlService
 import com.example.rtc.WebRtcClient
 import org.webrtc.*
@@ -109,63 +112,101 @@ fun RtcDemoScreen(onBack: () -> Unit) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Button(onClick = onBack) { Text("Back") }
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Button(
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth()
+        ) { 
+            Text(stringResource(R.string.rtc_back)) 
+        }
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
-            }) { Text("Start Screen") }
-            
-            Button(onClick = {
-                rtcClient.stopScreenCapture()
-                context.stopService(Intent(context, RtcService::class.java))
-                log("Screen Capture Stopped")
-            }) { Text("Stop Screen") }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            item {
+                Button(
+                    onClick = { screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent()) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(stringResource(R.string.rtc_start_screen)) }
+            }
+            item {
+                Button(
+                    onClick = {
+                        rtcClient.stopScreenCapture()
+                        context.stopService(Intent(context, RtcService::class.java))
+                        log("Screen Capture Stopped")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(stringResource(R.string.rtc_stop_screen)) }
+            }
+            item {
+                Button(
+                    onClick = {
+                        rtcClient.startAudioCapture()
+                        log("Audio Capture Started")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(stringResource(R.string.rtc_start_audio)) }
+            }
+            item {
+                Button(
+                    onClick = {
+                        rtcClient.stopAudioCapture()
+                        log("Audio Capture Stopped")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(stringResource(R.string.rtc_stop_audio)) }
+            }
+            item {
+                Button(
+                    onClick = {
+                        rtcClient.sendMessage("Hello World ${System.currentTimeMillis()}")
+                        log("Msg Sent")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(stringResource(R.string.rtc_send_msg)) }
+            }
         }
         
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                rtcClient.startAudioCapture()
-                log("Audio Capture Started")
-            }) { Text("Start Audio") }
-            
-            Button(onClick = {
-                rtcClient.stopAudioCapture()
-                log("Audio Capture Stopped")
-            }) { Text("Stop Audio") }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                rtcClient.sendMessage("Hello World ${System.currentTimeMillis()}")
-                log("Msg Sent")
-            }) { Text("Send Msg") }
-        }
+        Spacer(modifier = Modifier.height(16.dp))
         
-        Text("Protocol/Codec Switching:", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.rtc_protocol_switch), style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val selectedCodec = remember { mutableStateOf<String?>(null) }
             listOf("VP8", "VP9", "H264").forEach { codec ->
-                Button(onClick = {
-                    rtcClient.setPreferredVideoCodec(codec)
-                    log("Preferred Codec set to $codec")
-                    // Trigger renegotiation (Create Offer)
-                    rtcClient.createOffer(object : SdpObserver {
-                        override fun onCreateSuccess(desc: SessionDescription?) {
-                            log("Offer Created with $codec pref")
-                        }
-                        override fun onSetSuccess() { log("Set Local Desc Success") }
-                        override fun onCreateFailure(s: String?) { log("Create Offer Fail: $s") }
-                        override fun onSetFailure(s: String?) { log("Set Local Fail: $s") }
-                    })
-                }) { Text(codec) }
+                Button(
+                    onClick = {
+                        selectedCodec.value = codec
+                        rtcClient.setPreferredVideoCodec(codec)
+                        log("Preferred Codec set to $codec")
+                        // Trigger renegotiation (Create Offer)
+                        rtcClient.createOffer(object : SdpObserver {
+                            override fun onCreateSuccess(desc: SessionDescription?) {
+                                log("Offer Created with $codec pref")
+                            }
+                            override fun onSetSuccess() { log("Set Local Desc Success") }
+                            override fun onCreateFailure(s: String?) { log("Create Offer Fail: $s") }
+                            override fun onSetFailure(s: String?) { log("Set Local Fail: $s") }
+                        })
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedCodec.value == codec) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    )
+                ) { Text(codec) }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Logs:", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.rtc_logs), style = MaterialTheme.typography.titleMedium)
         LazyColumn {
             items(logs) { logMsg ->
                 Text(logMsg, style = MaterialTheme.typography.bodySmall)

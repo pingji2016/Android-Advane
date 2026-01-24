@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">My Application</string>
+    <string name="rtc_back">Back</string>
+    <string name="rtc_start_screen">Start Screen</string>
+    <string name="rtc_stop_screen">Stop Screen</string>
+    <string name="rtc_start_audio">Start Audio</string>
+    <string name="rtc_stop_audio">Stop Audio</string>
+    <string name="rtc_send_msg">Send Msg</string>
+    <string name="rtc_protocol_switch">Protocol/Codec Switching:</string>
+    <string name="rtc_logs">Logs:</string>
 </resources>

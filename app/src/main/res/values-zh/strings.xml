@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">我的应用</string>
+    <string name="rtc_back">返回</string>
+    <string name="rtc_start_screen">开始录屏</string>
+    <string name="rtc_stop_screen">停止录屏</string>
+    <string name="rtc_start_audio">开始录音</string>
+    <string name="rtc_stop_audio">停止录音</string>
+    <string name="rtc_send_msg">发送消息</string>
+    <string name="rtc_protocol_switch">协议/编码切换:</string>
+    <string name="rtc_logs">日志:</string>
+</resources>
