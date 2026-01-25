@@ -37,13 +37,10 @@ jobs:
         retention-days: 30
 
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: ncipollo/release-action@v1
       if: github.ref == 'refs/heads/main'
       with:
-        tag_name: v1.0.${{ github.run_number }}
+        tag: v1.0.${{ github.run_number }}
         name: Release v1.0.${{ github.run_number }}
-        draft: false
-        prerelease: false
-        files: app/build/outputs/apk/release/*.apk
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        artifacts: "app/build/outputs/apk/release/*.apk"
+        token: ${{ secrets.GITHUB_TOKEN }}
