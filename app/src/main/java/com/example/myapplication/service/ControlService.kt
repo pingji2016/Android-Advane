@@ -8,6 +8,8 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.media.AudioManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -51,6 +53,8 @@ class ControlService : AccessibilityService() {
             when (type) {
                 "click" -> handleClick(json)
                 "scroll" -> handleScroll(json)
+                "long_click" -> handleLongClick(json)
+                "double_click" -> handleDoubleClick(json)
                 "text" -> handleText(json)
                 "volume" -> handleVolume(json)
                 "back" -> performGlobalAction(GLOBAL_ACTION_BACK)
@@ -151,5 +155,52 @@ class ControlService : AccessibilityService() {
             .build()
 
         dispatchGesture(gesture, null, null)
+    }
+
+    private fun handleLongClick(json: JSONObject) {
+        val x = json.optDouble("x", 0.5).toFloat()
+        val y = json.optDouble("y", 0.5).toFloat()
+        val duration = json.optLong("duration", 600)
+
+        val screenWidth = resources.displayMetrics.widthPixels
+        val screenHeight = resources.displayMetrics.heightPixels
+        val actualX = (x * screenWidth).coerceIn(0f, screenWidth.toFloat())
+        val actualY = (y * screenHeight).coerceIn(0f, screenHeight.toFloat())
+
+        Log.d(TAG, "LongClick at: $actualX, $actualY duration=$duration")
+
+        val path = Path().apply { moveTo(actualX, actualY) }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, duration))
+            .build()
+
+        dispatchGesture(gesture, null, null)
+    }
+
+    private fun handleDoubleClick(json: JSONObject) {
+        val x = json.optDouble("x", 0.5).toFloat()
+        val y = json.optDouble("y", 0.5).toFloat()
+        val interval = json.optLong("interval", 120)
+
+        val screenWidth = resources.displayMetrics.widthPixels
+        val screenHeight = resources.displayMetrics.heightPixels
+        val actualX = (x * screenWidth).coerceIn(0f, screenWidth.toFloat())
+        val actualY = (y * screenHeight).coerceIn(0f, screenHeight.toFloat())
+
+        fun tapGesture(): GestureDescription {
+            val path = Path().apply { moveTo(actualX, actualY) }
+            return GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0, 100))
+                .build()
+        }
+
+        val handler = Handler(Looper.getMainLooper())
+        dispatchGesture(tapGesture(), object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                handler.postDelayed({
+                    dispatchGesture(tapGesture(), null, null)
+                }, interval)
+            }
+        }, null)
     }
 }
