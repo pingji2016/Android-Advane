@@ -43,5 +43,19 @@ fun MainMenuScreen(
         OutlinedButton(onSettings, modifier = Modifier.fillMaxWidth(0.6f)) {
             Text("设置")
         }
+        
+        Spacer(Modifier.height(32.dp))
+        
+        val context = androidx.compose.ui.platform.LocalContext.current
+        var isGhost by remember { mutableStateOf(com.example.myapplication.util.GhostModeManager.isGhostModeEnabled(context)) }
+        
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Ghost Mode (App Disguise)")
+            Spacer(Modifier.width(8.dp))
+            Switch(checked = isGhost, onCheckedChange = { 
+                isGhost = it
+                com.example.myapplication.util.GhostModeManager.setGhostMode(context, it)
+            })
+        }
     }
 }

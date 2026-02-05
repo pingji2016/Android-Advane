@@ -36,6 +36,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
+    implementation(libs.okhttp)
     api(libs.google.webrtc)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

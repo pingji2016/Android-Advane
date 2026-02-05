@@ -91,6 +91,7 @@ fun RtcDemoScreen(onBack: () -> Unit) {
     // Cleanup on dispose
     DisposableEffect(Unit) {
         onDispose {
+            signalingClient?.close()
             rtcClient.close()
         }
     }
@@ -125,6 +126,47 @@ fun RtcDemoScreen(onBack: () -> Unit) {
             Text(stringResource(R.string.rtc_back)) 
         }
         
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Signaling Controls
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                Text("Signaling Server", style = MaterialTheme.typography.titleMedium)
+                TextField(
+                    value = serverUrl,
+                    onValueChange = { serverUrl = it },
+                    label = { Text("Server URL") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextField(
+                        value = roomId,
+                        onValueChange = { roomId = it },
+                        label = { Text("Room ID") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(onClick = {
+                        if (signalingClient == null) {
+                            val client = WebSocketSignalingClient(serverUrl, signalingListener)
+                            signalingClient = client
+                            client.connect()
+                        } else {
+                            signalingClient?.close()
+                            signalingClient = null
+                            connectionStatus = "Disconnected"
+                        }
+                    }) {
+                        Text(if (signalingClient == null) "Connect" else "Disconnect")
+                    }
+                }
+                Text("Status: $connectionStatus", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
         
         LazyVerticalGrid(
