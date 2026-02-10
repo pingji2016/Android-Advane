@@ -19,82 +19,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.R
-import com.example.myapplication.service.ControlService
-import com.example.rtc.WebRtcClient
-import org.webrtc.*
 
 @Composable
-fun RtcDemoScreen(onBack: () -> Unit) {
+fun RtcDemoScreen(
+    onBack: () -> Unit,
+    viewModel: RtcViewModel = viewModel()
+) {
     val context = LocalContext.current
-    var logs by remember { mutableStateOf(listOf<String>()) }
-    
-    fun log(msg: String) {
-        logs = logs + msg
-    }
-
-    val observer = remember {
-        object : PeerConnection.Observer {
-            override fun onSignalingChange(state: PeerConnection.SignalingState?) { log("Signaling: $state") }
-            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) { log("ICE Conn: $state") }
-            override fun onIceConnectionReceivingChange(receiving: Boolean) {}
-            override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) { log("ICE Gathering: $state") }
-            override fun onIceCandidate(candidate: IceCandidate?) { log("ICE Candidate: ${candidate?.sdpMid}") }
-            override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {}
-            override fun onAddStream(stream: MediaStream?) { log("Add Stream: ${stream?.id}") }
-            override fun onRemoveStream(stream: MediaStream?) { log("Remove Stream") }
-            override fun onDataChannel(dc: DataChannel?) { 
-                log("DataChannel Received: ${dc?.label()}")
-                dc?.registerObserver(object : DataChannel.Observer {
-                    override fun onBufferedAmountChange(amount: Long) {}
-                    override fun onStateChange() { log("Remote DC State: ${dc.state()}") }
-                    override fun onMessage(buffer: DataChannel.Buffer) {
-                        val data = ByteArray(buffer.data.remaining())
-                        buffer.data.get(data)
-                        val message = String(data)
-                        log("Rx Msg: $message")
-                        
-                        // Dispatch to ControlService
-                        ControlService.instance?.executeCommand(message) ?: run {
-                            log("ControlService not connected")
-                        }
-                    }
-                })
-            }
-            override fun onRenegotiationNeeded() { log("Renegotiation Needed") }
-            override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) { log("Add Track") }
-        }
-    }
-
-    val rtcClient = remember { WebRtcClient(context, observer) }
-    
-    // Initialize PC on first load
-    LaunchedEffect(Unit) {
-        // Use Google STUN server for testing
-        val iceServers = listOf(
-            PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
-        )
-        rtcClient.createPeerConnection(iceServers)
-        
-        // Setup local data channel
-        rtcClient.createDataChannel("control", object : DataChannel.Observer {
-            override fun onBufferedAmountChange(amount: Long) {}
-            override fun onStateChange() { log("Local DC State changed") }
-            override fun onMessage(buffer: DataChannel.Buffer) {
-                val data = ByteArray(buffer.data.remaining())
-                buffer.data.get(data)
-                log("Local DC Rx: ${String(data)}")
-            }
-        })
-    }
-    
-    // Cleanup on dispose
-    DisposableEffect(Unit) {
-        onDispose {
-            signalingClient?.close()
-            rtcClient.close()
-        }
-    }
+    val uiState by viewModel.uiState.collectAsState()
 
     val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
     val screenCaptureLauncher = rememberLauncherForActivityResult(
@@ -107,10 +41,9 @@ fun RtcDemoScreen(onBack: () -> Unit) {
             } else {
                 context.startService(intent)
             }
-            rtcClient.startScreenCapture(result.data!!)
-            log("Screen Capture Started")
+            viewModel.startScreenCapture(result.data!!)
         } else {
-            log("Screen Capture Permission Denied")
+            // log("Screen Capture Permission Denied")
         }
     }
 
@@ -133,8 +66,8 @@ fun RtcDemoScreen(onBack: () -> Unit) {
             Column(modifier = Modifier.padding(8.dp)) {
                 Text("Signaling Server", style = MaterialTheme.typography.titleMedium)
                 TextField(
-                    value = serverUrl,
-                    onValueChange = { serverUrl = it },
+                    value = uiState.serverUrl,
+                    onValueChange = { viewModel.updateServerUrl(it) },
                     label = { Text("Server URL") },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -144,26 +77,22 @@ fun RtcDemoScreen(onBack: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextField(
-                        value = roomId,
-                        onValueChange = { roomId = it },
+                        value = uiState.roomId,
+                        onValueChange = { viewModel.updateRoomId(it) },
                         label = { Text("Room ID") },
                         modifier = Modifier.weight(1f)
                     )
                     Button(onClick = {
-                        if (signalingClient == null) {
-                            val client = WebSocketSignalingClient(serverUrl, signalingListener)
-                            signalingClient = client
-                            client.connect()
+                        if (uiState.isConnected) {
+                            viewModel.disconnectSignaling()
                         } else {
-                            signalingClient?.close()
-                            signalingClient = null
-                            connectionStatus = "Disconnected"
+                            viewModel.connectSignaling()
                         }
                     }) {
-                        Text(if (signalingClient == null) "Connect" else "Disconnect")
+                        Text(if (!uiState.isConnected) "Connect" else "Disconnect")
                     }
                 }
-                Text("Status: $connectionStatus", style = MaterialTheme.typography.bodySmall)
+                Text("Status: ${uiState.connectionStatus}", style = MaterialTheme.typography.bodySmall)
             }
         }
 
@@ -178,42 +107,38 @@ fun RtcDemoScreen(onBack: () -> Unit) {
             item {
                 Button(
                     onClick = { screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent()) },
+                    enabled = !uiState.isScreenCapturing,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(stringResource(R.string.rtc_start_screen)) }
             }
             item {
                 Button(
                     onClick = {
-                        rtcClient.stopScreenCapture()
+                        viewModel.stopScreenCapture()
                         context.stopService(Intent(context, RtcService::class.java))
-                        log("Screen Capture Stopped")
                     },
+                    enabled = uiState.isScreenCapturing,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(stringResource(R.string.rtc_stop_screen)) }
             }
             item {
                 Button(
-                    onClick = {
-                        rtcClient.startAudioCapture()
-                        log("Audio Capture Started")
-                    },
+                    onClick = { viewModel.startAudioCapture() },
+                    enabled = !uiState.isAudioCapturing,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(stringResource(R.string.rtc_start_audio)) }
             }
             item {
                 Button(
-                    onClick = {
-                        rtcClient.stopAudioCapture()
-                        log("Audio Capture Stopped")
-                    },
+                    onClick = { viewModel.stopAudioCapture() },
+                    enabled = uiState.isAudioCapturing,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(stringResource(R.string.rtc_stop_audio)) }
             }
             item {
                 Button(
                     onClick = {
-                        rtcClient.sendMessage("Hello World ${System.currentTimeMillis()}")
-                        log("Msg Sent")
+                        viewModel.sendMessage("Hello World ${System.currentTimeMillis()}")
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(stringResource(R.string.rtc_send_msg)) }
@@ -229,17 +154,7 @@ fun RtcDemoScreen(onBack: () -> Unit) {
                 Button(
                     onClick = {
                         selectedCodec.value = codec
-                        rtcClient.setPreferredVideoCodec(codec)
-                        log("Preferred Codec set to $codec")
-                        // Trigger renegotiation (Create Offer)
-                        rtcClient.createOffer(object : SdpObserver {
-                            override fun onCreateSuccess(desc: SessionDescription?) {
-                                log("Offer Created with $codec pref")
-                            }
-                            override fun onSetSuccess() { log("Set Local Desc Success") }
-                            override fun onCreateFailure(s: String?) { log("Create Offer Fail: $s") }
-                            override fun onSetFailure(s: String?) { log("Set Local Fail: $s") }
-                        })
+                        viewModel.setPreferredCodec(codec)
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (selectedCodec.value == codec) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
@@ -251,7 +166,7 @@ fun RtcDemoScreen(onBack: () -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(stringResource(R.string.rtc_logs), style = MaterialTheme.typography.titleMedium)
         LazyColumn {
-            items(logs) { logMsg ->
+            items(uiState.logs) { logMsg ->
                 Text(logMsg, style = MaterialTheme.typography.bodySmall)
             }
         }
